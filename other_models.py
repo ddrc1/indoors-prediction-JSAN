@@ -12,16 +12,16 @@ import gzip
 from xgboost import XGBRegressor
 
 def getModel(model_choice: int = 0):
-    if model_choice == 0:
-        return RandomForestRegressor(max_features="sqrt", min_samples_split=6, n_jobs=12)
-    if model_choice == 1:
+    if model_choice == "random_forest":
+        return RandomForestRegressor(max_features="sqrt", min_samples_split=6) # if possible, use the param n_jobs
+    if model_choice == "ada_boost":
         base = DecisionTreeRegressor(max_depth=18, min_samples_split=14)
         return AdaBoostRegressor(n_estimators=50, base_estimator=base, loss="linear", learning_rate=0.1)
-    if model_choice == 2:
-        return XGBRegressor(n_estimators=400, max_depth=12, learning_rate=0.1, subsample=0.1, colsample_bytree=1.0, n_jobs=8)
-    if model_choice == 3:
+    if model_choice == "xgboost":
+        return XGBRegressor(n_estimators=400, max_depth=12, learning_rate=0.1, subsample=0.1) # if possible, use the param n_jobs
+    if model_choice == "hist_boost":
         model = HistGradientBoostingRegressor(learning_rate=0.3,
-                                    loss='squared_error'
+                                    loss='squared_error',
                                     max_bins=100,
                                     max_iter=1000)
         return model
@@ -48,32 +48,32 @@ def interpol(df, col_x1, col_y1, col_z1, col_x3, col_y3, col_z3, col_t3, col_tar
     return df_interpoled
 
 
-def validation(df_test: pd.DataFrame, df_predito: pd.DataFrame):
+def validation(df_test: pd.DataFrame, df_pred: pd.DataFrame):
     x_real = df_test['x2']
-    x_previsto = df_predito['x2']
-    z_previsto = df_predito['z2']
+    x_pred = df_pred['x2']
+    z_pred = df_pred['z2']
     
-    rmse_x = mean_squared_error(x_real, x_previsto) ** (1 / 2)
-    _, _, r_value, _, _ = stats.linregress(x_real, x_previsto)
+    rmse_x = mean_squared_error(x_real, x_pred) ** (1 / 2)
+    _, _, r_value, _, _ = stats.linregress(x_real, x_pred)
     r2_x = r_value*r_value
-    mae_x = mean_absolute_error(x_real, x_previsto)
-    mse_x = mean_squared_error(x_real, x_previsto)
+    mae_x = mean_absolute_error(x_real, x_pred)
+    mse_x = mean_squared_error(x_real, x_pred)
 
     y_real = df_test['y2']
-    y_previsto = df_predito['y2']
-    rmse_y = mean_squared_error(y_real, y_previsto) ** (1 / 2)
-    _, _, r_value, _, _ = stats.linregress(y_real, y_previsto)
+    y_pred = df_pred['y2']
+    rmse_y = mean_squared_error(y_real, y_pred) ** (1 / 2)
+    _, _, r_value, _, _ = stats.linregress(y_real, y_pred)
     r2_y = r_value*r_value
-    mae_y = mean_absolute_error(y_real, y_previsto)
-    mse_y = mean_squared_error(y_real, y_previsto)
+    mae_y = mean_absolute_error(y_real, y_pred)
+    mse_y = mean_squared_error(y_real, y_pred)
     
     z_real = df_test['z2']
-    z_previsto = df_predito['z2']
-    rmse_z = mean_squared_error(z_real, z_previsto) ** (1 / 2)
-    _, _, r_value, _, _ = stats.linregress(z_real, z_previsto)
+    z_pred = df_pred['z2']
+    rmse_z = mean_squared_error(z_real, z_pred) ** (1 / 2)
+    _, _, r_value, _, _ = stats.linregress(z_real, z_pred)
     r2_z = r_value*r_value
-    mae_z = mean_absolute_error(z_real, z_previsto)
-    mse_z = mean_squared_error(z_real, z_previsto)
+    mae_z = mean_absolute_error(z_real, z_pred)
+    mse_z = mean_squared_error(z_real, z_pred)
 
     return (r2_x, r2_y, r2_z), (rmse_x, rmse_y, rmse_z), (mae_x, mae_y, mae_z), (mse_x, mse_y, mse_z)
 
@@ -152,39 +152,38 @@ def splitData(df: pd.DataFrame, window_size = 3):
     
     return df_feat_train, df_target_train
 
+if not os.path.exists(f'./validation/models/'):
+    os.mkdir(f'./validation/models/')
 
-file = "env1.txt"
-#file = "real.csv"
+#file = "env1.txt"
+file = "real.csv"
 env = file.split(".")[0]
 
 if env == "real":
-    dados = pd.read_csv(f"./datasets/{file}", sep=',', usecols=['x', 'y'])
-    dados['z'] = 1
+    data = pd.read_csv(f"./datasets/{file}", sep=',', usecols=['x', 'y'])
+    data['z'] = 1
     sizes = [15500]
 else:
-    dados = pd.read_csv(f"./datasets/{file}", sep=',', usecols=['x', 'y', 'z'])
-    sizes = [5000, 20000, 35000, 65000, 80000, 95000, 110000, 125000, 140000, 155000, 170000, 185000, 200000]
+    data = pd.read_csv(f"./datasets/{file}", sep=';', usecols=['x', 'y', 'z'])
+    sizes = [5000, 20000, 35000, 65000, 80000, 95000, 110000, 125000, 140000, 155000, 170000]
 
 for size in sizes:
     print(size)
-    dados_treino = dados[:size]
-    dados_treino.reset_index(inplace=True)
-    size_str = str(int(len(dados_treino)/1000)) + "k"
+    data_train = data[:size]
+    data_train.reset_index(inplace=True)
+    size_str = str(int(len(data_train)/1000)) + "k"
     
     if env != "real":
-        dados_teste = dados[-100000:]
+        data_test = data[-100000:]
     else:
-        dados_teste = dados[size:]
-    dados_teste.reset_index(inplace=True)
+        data_test = data[size:]
+    data_test.reset_index(inplace=True)
 
-    model_choice = 0
-    times = 1
+    model_choice = "random_forest"
+    times = 10
 
-    path_rf = f"./validation/{env}/random_forest"
-    path_ada = f"./validation/{env}/adaboost"
-    path_il = f"./validation/{env}/interpolation"
-    path_xgb = f"./validation/{env}/xgboost"
-    path_hist = f"./validation/{env}/histboost"
+    path_other_models = f"{env}/{model_choice}"
+    path_li = f"{env}/interpolation"
     
     for w in range(3, 33):        
         r2_exec = {'x': [], 'y': [], 'z': []}
@@ -192,24 +191,23 @@ for size in sizes:
         rmse_exec = {'x': [], 'y': [], 'z': []}
         mae_exec = {'x': [], 'y': [], 'z': []}
                 
-        df_feat_train, df_target_train = splitData(dados_treino, window_size=w)
-        df_feat_test, df_real = splitData(dados_teste, window_size=w)
+        df_feat_train, df_target_train = splitData(data_train, window_size=w)
+        df_feat_test, df_real = splitData(data_test, window_size=w)
         df_feat_train.info()
             
         for i in range(times):
             print(w, f"- {i + 1} time")
 
-            print("modelando...")
+            print("modeling...")
             model = MultiOutputRegressor(getModel(model_choice)).fit(df_feat_train, df_target_train)
 
-            predicted_points = model.predict(df_feat_test)
-            df_predito = pd.DataFrame(predicted_points, columns = ['x2','y2', 'z2'])
+            pred_points = model.predict(df_feat_test)
+            df_pred = pd.DataFrame(pred_points, columns = ['x2','y2', 'z2'])
 
-            model_indicators = validation(df_real, df_predito)
+            model_indicators = validation(df_real, df_pred)
             
-            
+            print("validating...")
             (r2_x, r2_y, r2_z), (rmse_x, rmse_y, rmse_z), (mae_x, mae_y, mae_z), (mse_x, mse_y, mse_z) = model_indicators
-            print("Stack:")
             print(f"R2: x={r2_x}, y={r2_y}, z={r2_z}")
             print(f"RMSE: x={rmse_x}, y={rmse_y}, z={rmse_z}")
             print(f"MAE: x={mae_x}, y={mae_y}, z={mae_z}")
@@ -232,24 +230,23 @@ for size in sizes:
             mae_exec['z'].append(mae_z)
 
             if i == 0:
-                f = gzip.open(f'./validacao/modelos/{env}/random_forest/model_d{w-2}.sav', 'wb')
+                if not os.path.exists(f'./validation/models/{env}'):
+                    os.mkdir(f'./validation/models/{env}')
+                if not os.path.exists(f'./validation/models/{path_other_models}'):
+                    os.mkdir(f'./validation/models/{path_other_models}')
+
+                f = gzip.open(f'./validation/models/{path_other_models}/model_d{w-2}.sav', 'wb')
                 pickle.dump(model, f)
+
             del model
-            del df_predito
-            del predicted_points
+            del df_pred
+            del pred_points
             gc.collect()
 
-        continue
-
-        pd.DataFrame(r2_exec).to_csv(f"{path_hist}/r2_{size_str}_d{w-2}.csv")
-        pd.DataFrame(mse_exec).to_csv(f"{path_hist}/mse_{size_str}_d{w-2}.csv")
-        pd.DataFrame(rmse_exec).to_csv(f"{path_hist}/rmse_{size_str}_d{w-2}.csv")
-        pd.DataFrame(mae_exec).to_csv(f"{path_hist}/mae_{size_str}_d{w-2}.csv")
-
-        del df_feat_train
-        del df_target_train
-        del df_feat_test
-        del df_real
+        pd.DataFrame(r2_exec).to_csv(f"./validation/{path_other_models}/r2_{size_str}_d{w-2}.csv")
+        pd.DataFrame(mse_exec).to_csv(f"./validation/{path_other_models}/mse_{size_str}_d{w-2}.csv")
+        pd.DataFrame(rmse_exec).to_csv(f"./validation/{path_other_models}/rmse_{size_str}_d{w-2}.csv")
+        pd.DataFrame(mae_exec).to_csv(f"./validation/{path_other_models}/mae_{size_str}_d{w-2}.csv")
         
         # continue
         
@@ -274,8 +271,8 @@ for size in sizes:
         rmse_interp = [{'x': rmse_x, 'y': rmse_y, 'z': rmse_z}]
         mae_interp = [{'x': mae_x, 'y': mae_y, 'z': mae_z}]
         
-        pd.DataFrame(r2_interp).to_csv(f"{path_il}/r2_{size_str}_d{w-2}.csv")
-        pd.DataFrame(mse_interp).to_csv(f"{path_il}/mse_{size_str}_d{w-2}.csv")
-        pd.DataFrame(rmse_interp).to_csv(f"{path_il}/rmse_{size_str}_d{w-2}.csv")
-        pd.DataFrame(mae_interp).to_csv(f"{path_il}/mae_{size_str}_d{w-2}.csv")
+        pd.DataFrame(r2_interp).to_csv(f"./validation/{path_li}/r2_{size_str}_d{w-2}.csv")
+        pd.DataFrame(mse_interp).to_csv(f"./validation/{path_li}/mse_{size_str}_d{w-2}.csv")
+        pd.DataFrame(rmse_interp).to_csv(f"./validation/{path_li}/rmse_{size_str}_d{w-2}.csv")
+        pd.DataFrame(mae_interp).to_csv(f"./validation/{path_li}/mae_{size_str}_d{w-2}.csv")
         print("-----------------------------------------------------------------------------------------")
