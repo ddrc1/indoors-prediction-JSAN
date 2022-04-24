@@ -1,7 +1,7 @@
 import os
 import gc
 from sklearn.multioutput import MultiOutputRegressor
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, AdaBoostRegressor, StackingRegressor, HistGradientBoostingRegressor
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, AdaBoostRegressor, HistGradientBoostingRegressor
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.metrics import *
 import numpy as np
